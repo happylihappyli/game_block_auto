@@ -615,9 +615,8 @@ function performAiMove() {
     }
 }
 
-// 找到最佳移动位置
+// 寻找最佳移动位置（考虑下一个方块）
 function findBestMove() {
-    // 简单的AI算法：找到消除行数最多、高度最低的位置
     let bestScore = -1000000;
     let bestPosition = {};
     
@@ -647,12 +646,25 @@ function findBestMove() {
             
             // 检查在临时棋盘上放置方块是否有效
             if (isPositionValidOnTempBoard(tempBoard, currentPiece.shape, x, y)) {
+                // 放置当前方块
                 placePieceOnBoard(tempBoard, currentPiece.shape, currentPiece.color, x, y);
-                let score = evaluatePosition(tempBoard,x,y);//y越小越好
+                
+                // 获取当前方块放置后的评分
+                let currentScore = evaluatePosition(tempBoard, x, y);
+                
+                // 尝试考虑下一个方块的最佳放置位置（前瞻）
+                let nextPieceScore = 0;
+                if (nextPiece && isAiMode) {
+                    // 为下一个方块进行前瞻评估
+                    nextPieceScore = evaluateNextPiece(tempBoard);
+                }
+                
+                // 组合当前方块和下一个方块的评分（当前方块权重更高）
+                let combinedScore = currentScore + nextPieceScore * 0.3; // 下一个方块的评分权重为30%
                 
                 // 更新最佳位置
-                if (score > bestScore) {
-                    bestScore = score;
+                if (combinedScore > bestScore) {
+                    bestScore = combinedScore;
                     bestPosition = {
                         shape: JSON.parse(JSON.stringify(currentPiece.shape)),
                         x: x,
@@ -670,6 +682,118 @@ function findBestMove() {
     currentPiece.shape = originalShape;
     
     return bestPosition;
+}
+
+// 评估下一个方块的最佳放置位置（用于前瞻）
+function evaluateNextPiece(tempBoard) {
+    let bestNextScore = -1000000;
+    let nextPieceCopy = JSON.parse(JSON.stringify(nextPiece));
+    let originalNextShape = JSON.parse(JSON.stringify(nextPieceCopy.shape));
+    
+    // 根据下一个方块类型决定尝试的旋转次数
+    let rotationCount = 4; // 默认旋转4次
+    if ([1,4,5,7].includes(nextPieceCopy.color)) { // O形(4),I形(1),S形和Z形只需要旋转2次
+        rotationCount = 2;
+    }
+    
+    for (let rotation = 0; rotation < rotationCount; rotation++) {
+        // 尝试所有可能的水平位置
+        for (let x = 0; x <= BOARD_WIDTH - nextPieceCopy.max_length; x++) {
+            // 计算方块落到底部的位置
+            let y = 0; // 从顶部开始
+            let tempBoardCopy = copyBoard(tempBoard);
+            
+            // 模拟下一个方块下落到底部
+            while (isPositionValidOnTempBoard(tempBoardCopy, nextPieceCopy.shape, x, y + 1)) {
+                y++;
+            }
+            
+            // 检查在临时棋盘上放置下一个方块是否有效
+            if (isPositionValidOnTempBoard(tempBoardCopy, nextPieceCopy.shape, x, y)) {
+                // 放置下一个方块
+                placePieceOnBoard(tempBoardCopy, nextPieceCopy.shape, nextPieceCopy.color, x, y);
+                
+                // 评估下一个方块放置后的位置分数
+                let nextScore = evaluatePosition(tempBoardCopy, x, y);
+                
+                // 更新最佳下一个方块分数
+                if (nextScore > bestNextScore) {
+                    bestNextScore = nextScore;
+                }
+            }
+        }
+        
+        // 旋转下一个方块（使用临时函数旋转）
+        rotateTempPiece(nextPieceCopy);
+    }
+    
+    // 恢复原始形状
+    nextPieceCopy.shape = originalNextShape;
+    
+    return bestNextScore;
+}
+
+// 临时旋转方块（不改变游戏状态）
+function rotateTempPiece(piece) {
+    let shape = piece.shape;
+    let rows = shape.length;
+    let cols = shape[0].length;
+    
+    // 创建旋转后的形状
+    let rotatedShape = Array(cols).fill().map(() => Array(rows).fill(0));
+    
+    // 执行旋转（逆时针90度）
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+            rotatedShape[cols - 1 - x][y] = shape[y][x];
+        }
+    }
+    
+    // 如果左边为空，方块左移
+    let x = 0;
+    let count_zero = rows;
+    while (count_zero == rows) {
+        count_zero = 0;
+        for (let y = 0; y < rows; y++) {
+            if (rotatedShape[y][x] == 0) {
+                count_zero++;
+            }
+        }
+        if (count_zero < rows) {
+            break;
+        }
+        for (let y = 0; y < rows; y++) {
+            for (let x = 1; x < cols; x++) {
+                rotatedShape[y][x - 1] = rotatedShape[y][x];
+            }
+            rotatedShape[y][cols - 1] = 0;
+        }
+    }
+    
+    // 如果下面为空，方块下移
+    let y = rows - 1;
+    count_zero = cols;
+    while (count_zero == cols) {
+        count_zero = 0;
+        for (let x = 0; x < cols; x++) {
+            if (rotatedShape[y][x] == 0) {
+                count_zero++;
+            }
+        }
+        if (count_zero < cols) {
+            break;
+        }
+        for (let x = 0; x < cols; x++) {
+            for (let y = rows - 1; y > 0; y--) {
+                rotatedShape[y][x] = rotatedShape[y - 1][x];
+            }
+            rotatedShape[0][x] = 0;
+        }
+    }
+    
+    // 更新方块形状和最大长度
+    piece.shape = rotatedShape;
+    piece.max_length = calculateMaxLength(rotatedShape);
 }
 
 // 评估位置的好坏
