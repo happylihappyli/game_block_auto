@@ -291,7 +291,7 @@ function startGame() {
     }
     
     // 根据是否为AI模式设置不同的下落速度
-    const dropInterval = isAiMode ? 100 : 1000;
+    const dropInterval = isAiMode ? 50 : 1000;
     
     autoDropTimer = setInterval(() => {
         if (!isPaused && !isGameOver) {
@@ -577,7 +577,7 @@ function updateScoreAndLevel(linesCleared) {
                 clearInterval(autoDropTimer);
                 
                 // 根据是否为AI模式设置不同的下落速度
-                const dropInterval = isAiMode ? 100 : 1000;
+                const dropInterval = isAiMode ? 50 : 1000;
                 
                 autoDropTimer = setInterval(() => {
                     if (!isPaused && !isGameOver) {
@@ -594,7 +594,7 @@ function updateScoreAndLevel(linesCleared) {
 
 // AI执行移动决策
 function performAiMove() {
-    if (currentPiece.y<15){
+    if (currentPiece.y<10){
         let bestMove = findBestMove();
 
         // 旋转到最佳方向 - 添加旋转次数限制，防止死循环
@@ -607,10 +607,12 @@ function performAiMove() {
         
         // 移动到最佳位置
         // 增加位置偏差检查，避免微小偏差导致的频繁移动
-        if (currentPiece.x < bestMove.x) {
-            movePieceRight();
-        } else if (currentPiece.x > bestMove.x) {
-            movePieceLeft();
+        for(var i=0;i<10;i++){
+            if (currentPiece.x < bestMove.x) {
+                movePieceRight();
+            } else if (currentPiece.x > bestMove.x) {
+                movePieceLeft();
+            }
         }
     }
 }
@@ -809,6 +811,9 @@ function evaluatePosition(tempBoard,currentX,currentY) {
     let aggregateHeight = 0; // 总高度
     let wellCount = 0; // 井的数量（两边都高的沟）
     let completeLines = 0; // 完整行数
+    let highestHoleX = -1; // 最高洞的x坐标
+    let blocksAboveHighestHole = 0; // 最高洞上方的方块数量
+    let highestHoleY = BOARD_HEIGHT; // 最高洞的y坐标（越小越接近顶部）
     
     let tempBoard2 = copyBoard(tempBoard);
 
@@ -820,11 +825,13 @@ function evaluatePosition(tempBoard,currentX,currentY) {
 
 
     
-    // 计算每列的高度和空洞数量
+    // 计算每列的高度和空洞数量，同时寻找最高的洞
     for (let x = 0; x < BOARD_WIDTH; x++) {
         let columnHeight = 0;
         let hasBlock = false;
         var holes_weight=0;
+        let columnHighestHoleY = BOARD_HEIGHT; // 当前列最高洞的y坐标
+        
         for (let y = 0; y < BOARD_HEIGHT; y++) {
 
             weight+=tempBoard2[y][x]*y;
@@ -835,8 +842,27 @@ function evaluatePosition(tempBoard,currentX,currentY) {
                 }
                 hasBlock = true;
                 holes_weight+=1;
+                
+                // 如果当前列已经找到了最高洞，计算洞上方的方块数量
+                if (columnHighestHoleY < y && highestHoleX === x) {
+                    blocksAboveHighestHole++;
+                }
             } else{
-                if (hasBlock) holes+=1;//holes_weight; //洞口上面的积木越多，越不好
+                if (hasBlock) {
+                    holes+=1; //holes_weight; //洞口上面的积木越多，越不好
+                    
+                    // 找到当前列的最高洞（y值最小的洞）
+                    if (y < columnHighestHoleY) {
+                        columnHighestHoleY = y;
+                        
+                        // 更新全局最高洞
+                        if (y < highestHoleY) {
+                            highestHoleY = y;
+                            highestHoleX = x;
+                            blocksAboveHighestHole = holes_weight; // 初始化洞上方方块数量
+                        }
+                    }
+                }
             }
         }
         
@@ -862,7 +888,7 @@ function evaluatePosition(tempBoard,currentX,currentY) {
         // 对于最左边的列，只需要判断右边的列是否比它高
         if (x === 0 && x + 1 < BOARD_WIDTH) {
             if (columnHeights[x] < columnHeights[x+1] - 1 && columnHeights[x+1] > 0) {
-                narrow +=1;// columnHeights[x+1] - columnHeights[x];
+                narrow += columnHeights[x+1] - columnHeights[x];
                 // 如果左边没有列，但右边有列且比它高2格以上，也算作井
                 if (columnHeights[x] < 3 && columnHeights[x+1] > 4) {
                     wellCount += 1;
@@ -872,7 +898,7 @@ function evaluatePosition(tempBoard,currentX,currentY) {
         // 对于最右边的列，只需要判断左边的列是否比它高
         else if (x === BOARD_WIDTH - 1 && x - 1 >= 0) {
             if (columnHeights[x] < columnHeights[x-1] - 1 && columnHeights[x-1] > 0) {
-                narrow +=1;// columnHeights[x-1] - columnHeights[x];
+                narrow += columnHeights[x-1] - columnHeights[x];
                 // 如果右边没有列，但左边有列且比它高2格以上，也算作井
                 if (columnHeights[x] < 3 && columnHeights[x-1] > 4) {
                     wellCount += 1;
@@ -885,7 +911,7 @@ function evaluatePosition(tempBoard,currentX,currentY) {
                 columnHeights[x] < columnHeights[x+1] - 1 && 
                 columnHeights[x-1] > 0 && 
                 columnHeights[x+1] > 0) {
-                narrow +=1;// Math.max(columnHeights[x-1], columnHeights[x+1]) - columnHeights[x];
+                narrow +=  Math.max(columnHeights[x-1], columnHeights[x+1]) - columnHeights[x];
                 // 如果中间列比左右两边低2格以上，且左右两边都有方块，算作井
                 if (columnHeights[x] < 3 && columnHeights[x-1] > 4 && columnHeights[x+1] > 4) {
                     wellCount += 2; // 两边都高，权重更高
@@ -895,27 +921,27 @@ function evaluatePosition(tempBoard,currentX,currentY) {
     }
     
     var y_weight = 0;
-    if (currentY < 15) {  // 扩大y_weight的影响范围
-        y_weight = (16 - currentY);  // 改为正数，使方块位置越低得分越高
+    if (currentY < 8) {  // 扩大y_weight的影响范围
+        y_weight = (9 - currentY);  // 改为正数，使方块位置越低得分越高
     }
 
     // 使用自定义评分函数或默认公式
     if (customEvaluateFunction) {
         try {
-            return customEvaluateFunction(clearedLines, y_weight, weight, holes, narrow);
+            return customEvaluateFunction(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole);
         } catch (e) {
             console.error('自定义评分函数执行错误:', e);
             // 发生错误时回退到默认公式
-            return calculateScore(clearedLines, completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount);
+            return calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole);
         }
     } else {
         // 优化的评分公式：优先消除行数，其次降低总高度，减少空洞和粗糙度
-        return calculateScore(clearedLines, completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount);
+        return calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole);
     }
 }
 
 // 计算最终得分的辅助函数
-function calculateScore(clearedLines, completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount) {
+function calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole) {
     // 优化的权重分配
     // 1. 消除行数最重要
     // 2. 其次是降低堆叠高度和避免井
@@ -929,15 +955,23 @@ function calculateScore(clearedLines, completeLines, y_weight, weight, holes, na
     else if (completeLines === 3) lineBonus = 1000000;
     else if (completeLines >= 4) lineBonus = 1500000;
     
+    // 对最高洞上方方块的惩罚：上方方块越多，惩罚越严重
+    let highestHolePenalty = 0;
+    if (highestHoleX !== -1 && blocksAboveHighestHole > 0) {
+        // 上方方块数量的平方惩罚，使惩罚增长更快
+        highestHolePenalty = blocksAboveHighestHole *50000;
+    }
+    
     return lineBonus +
-           y_weight * 500 +       // 方块位置（低位加分）
            weight * 100 -          // 底部权重
+           y_weight * 50000 -       // 越高惩罚越多
            holes * 50000 -         // 空洞（增加惩罚）
-           narrow * 30000 -         // 深沟（增加惩罚，比空洞更严重）
+           narrow * 10000 -         // 深沟（增加惩罚，比空洞更严重）
            roughness * 0 -     // 粗糙度
-           aggregateHeight * 200 - // 总高度
-           maxHeight * 1000 -      // 最大高度
-           wellCount * 20000;      // 井的数量（高惩罚，避免形成深井）
+           aggregateHeight * 0 - // 总高度
+           maxHeight * 10000 -      // 最大高度
+           wellCount * 20000 -     // 井的数量（高惩罚，避免形成深井）
+           highestHolePenalty;     // 最高洞上方方块的惩罚
 }
 
 // 更新公式编辑器显示
@@ -946,7 +980,7 @@ function updateFormulaEditor() {
     if (formulaInput) {
         // 将calculateScore函数完整代码作为默认公式
         formulaInput.value = `// 计算最终得分的辅助函数
-function calculateScore(clearedLines, completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount) {
+function calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount) {
     // 优化的权重分配
     // 1. 消除行数最重要
     // 2. 其次是降低堆叠高度和避免井
@@ -973,27 +1007,6 @@ function calculateScore(clearedLines, completeLines, y_weight, weight, holes, na
     }
 }
 
-// AI执行移动决策
-function performAiMove() {
-    // 移除y坐标的限制，让AI可以在任何高度做出决策
-    let bestMove = findBestMove();
-
-    // 旋转到最佳方向 - 添加旋转次数限制，防止死循环
-    let rotationAttempts = 0;
-    const maxRotations = 10; // 设置最大旋转尝试次数
-    while (JSON.stringify(currentPiece.shape) !== JSON.stringify(bestMove.shape) && rotationAttempts < maxRotations) {
-        rotatePiece();
-        rotationAttempts++;
-    }
-    
-    // 移动到最佳位置
-    // 增加位置偏差检查，避免微小偏差导致的频繁移动
-    if (currentPiece.x < bestMove.x) {
-        movePieceRight();
-    } else if (currentPiece.x > bestMove.x) {
-        movePieceLeft();
-    }
-}
 
 // 绑定事件监听器
 function bindEventListeners() {
