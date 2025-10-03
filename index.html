@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>俄罗斯方块</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        h1 {
+            margin-bottom: 20px;
+            color: #ff6b6b;
+        }
+        
+        .game-container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        
+        .game-board {
+            border: 3px solid #444;
+            display: grid;
+            grid-template-columns: repeat(10, 30px);
+            grid-template-rows: repeat(20, 30px);
+            gap: 1px;
+            background-color: #2a2a2a;
+        }
+        
+        .game-info {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .info-box {
+            background-color: #2a2a2a;
+            border: 2px solid #444;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 150px;
+        }
+        
+        .info-box h3 {
+            margin-bottom: 10px;
+            color: #4ecdc4;
+        }
+        
+        .info-box p {
+            margin: 5px 0;
+            font-size: 18px;
+        }
+        
+        .next-piece {
+            display: grid;
+            grid-template-columns: repeat(4, 30px);
+            grid-template-rows: repeat(4, 30px);
+            gap: 1px;
+            background-color: #2a2a2a;
+            margin-top: 10px;
+        }
+        
+        .block {
+            width: 30px;
+            height: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4ecdc4;
+            color: #1a1a1a;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #45b7aa;
+        }
+        
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+        
+        .game-over {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(26, 26, 26, 0.95);
+            border: 3px solid #ff6b6b;
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 1000;
+        }
+        
+        .game-over h2 {
+            color: #ff6b6b;
+            margin-bottom: 20px;
+            font-size: 36px;
+        }
+        
+        .game-over p {
+            font-size: 24px;
+            margin-bottom: 30px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .instructions {
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 200px;
+        }
+        
+        .instructions h3 {
+            color: #4ecdc4;
+            margin-bottom: 10px;
+        }
+        
+        .formula-editor {
+            background-color: #2a2a2a;
+            border: 2px solid #444;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            width: 100%;
+            max-width: 500px;
+        }
+        
+        .formula-editor h3 {
+            color: #4ecdc4;
+            margin-bottom: 10px;
+        }
+        
+        .formula-editor textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            border: 1px solid #444;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 14px;
+            resize: vertical;
+        }
+        
+        .formula-editor .apply-btn {
+            margin-top: 10px;
+            width: 100%;
+        }
+        
+        .formula-help {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        
+        .formula-status {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            display: none;
+        }
+        
+        .formula-status.success {
+            background-color: rgba(0, 255, 0, 0.1);
+            color: #4ecdc4;
+            display: block;
+        }
+        
+        .formula-status.error {
+            background-color: rgba(255, 0, 0, 0.1);
+            color: #ff6b6b;
+            display: block;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .game-container {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .mobile-controls {
+                display: block;
+            }
+            
+            .instructions {
+                display: none;
+            }
+        }
+        
+        .instructions ul {
+            list-style: none;
+            line-height: 1.6;
+        }
+        
+        /* 方块颜色 */
+        .color0 { background-color: #1a1a1a; }
+        .color1 { background-color: #0000ff; }
+        .color2 { background-color: #00ff00; }
+        .color3 { background-color: #ff0000; }
+        .color4 { background-color: #ffff00; }
+        .color5 { background-color: #ff00ff; }
+        .color6 { background-color: #00ffff; }
+        .color7 { background-color: #ff8000; }
+        
+        /* 手机触摸控制区域 */
+        .mobile-controls {
+            display: none;
+            width: 100%;
+            max-width: 320px;
+            margin-top: 20px;
+        }
+        
+        .control-pad {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 80px);
+            gap: 10px;
+        }
+        
+        .control-btn {
+            border-radius: 10px;
+            background-color: #4ecdc4;
+            color: #1a1a1a;
+            font-size: 20px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        
+        .control-btn:active {
+            background-color: #45b7aa;
+            transform: scale(0.95);
+        }
+        
+        .btn-rotate {
+            grid-column: 2;
+            grid-row: 1;
+            background-color: #ff6b6b;
+        }
+        
+        .btn-left {
+            grid-column: 1;
+            grid-row: 2;
+        }
+        
+        .btn-right {
+            grid-column: 3;
+            grid-row: 2;
+        }
+        
+        .btn-down {
+            grid-column: 2;
+            grid-row: 2;
+        }
+        
+        .btn-harddrop {
+            grid-column: 2;
+            grid-row: 3;
+            background-color: #feca57;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
+            .game-container {
+                flex-direction: column;
+                align-items: center;
+                gap: 20px;
+            }
+            
+            .game-info {
+                flex-direction: row;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
+            
+            .instructions {
+                display: none;
+            }
+            
+            .mobile-controls {
+                display: block;
+            }
+            
+            .controls {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+        
+        /* 游戏记录样式 */
+        .game-records {
+            background-color: #2a2a2a;
+            border: 2px solid #444;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+            width: 100%;
+            max-width: 500px;
+            display: none;
+        }
+        
+        .game-records.show {
+            display: block;
+        }
+        
+        .game-records h3 {
+            color: #4ecdc4;
+            margin-bottom: 10px;
+        }
+        
+        .records-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .record-item {
+            border: 1px solid #444;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+            background-color: #1a1a1a;
+        }
+        
+        .record-score {
+            font-weight: bold;
+            color: #ff6b6b;
+            margin-bottom: 5px;
+        }
+        
+        .record-formula {
+            font-family: monospace;
+            font-size: 12px;
+            color: #4ecdc4;
+            word-break: break-all;
+            background-color: #0a0a0a;
+            padding: 5px;
+            border-radius: 3px;
+            max-height: 80px;
+            overflow-y: auto;
+        }
+        
+        .record-date {
+            font-size: 11px;
+            color: #888;
+            margin-top: 5px;
+        }
+        
+        .show-records-btn {
+            margin-top: 10px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>俄罗斯方块</h1>
+    
+    <div class="game-container">
+        <div class="game-board" id="gameBoard"></div>
+        
+        <div class="game-info">
+            <div class="info-box">
+                <h3>分数</h3>
+                <p id="score">0</p>
+                <h3>行数</h3>
+                <p id="lines">0</p>
+                <h3>等级</h3>
+                <p id="level">1</p>
+                <h3>状态</h3>
+                <p id="status">准备开始</p>
+            </div>
+            
+            <div class="info-box">
+                <h3>下一个方块</h3>
+                <div class="next-piece" id="nextPiece"></div>
+            </div>
+            
+            <div class="instructions">
+                <h3>操作说明</h3>
+                <ul>
+                    <li>← → 左右移动</li>
+                    <li>↑ 旋转方块</li>
+                    <li>↓ 加速下落</li>
+                    <li>空格 硬下落</li>
+                    <li>ESC 重新开始</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button id="startButton">开始</button>
+        <button id="pauseButton" disabled>暂停</button>
+        <button id="aiModeButton">AI模式</button>
+        <button id="restartButton">重新开始</button>
+        <button id="showRecordsButton">查看记录</button>
+    </div>
+    
+    <!-- 游戏结束面板 -->
+    <div class="game-over hidden" id="gameOverPanel">
+        <h2>游戏结束</h2>
+        <p id="finalScore">最终得分: 0</p>
+        <button id="playAgainButton">再玩一次</button>
+    </div>
+    
+    <!-- 手机触摸控制区域 -->
+    <div class="mobile-controls">
+        <div class="control-pad">
+            <button class="control-btn btn-rotate">↻</button>
+            <button class="control-btn btn-left">←</button>
+            <button class="control-btn btn-down">↓</button>
+            <button class="control-btn btn-right">→</button>
+            <button class="control-btn btn-harddrop">↧</button>
+        </div>
+    </div>
+    
+    <!-- 评分公式编辑器 -->
+    <div class="formula-editor">
+        <h3>AI评分公式编辑器</h3>
+        <textarea id="formulaInput" placeholder="请输入评分公式...">return clearedLines * 3000 + currentY*300 +weight*10 - holes * 1000 - narrow*400;</textarea>
+        <div class="formula-help">
+            <p>可用变量:</p>
+            <p>- clearedLines: 消除行数</p>
+            <p>- currentY: 当前方块Y坐标</p>
+            <p>- weight: 重量值</p>
+            <p>- holes: 空洞数量</p>
+            <p>- narrow: 深沟数量</p>
+        </div>
+        <button class="apply-btn" id="applyFormulaBtn">应用公式</button>
+        <div id="formulaStatus" class="formula-status"></div>
+    </div>
+    
+    <!-- 游戏记录面板 -->
+    <div class="game-records" id="gameRecordsPanel">
+        <h3>游戏记录</h3>
+        <div class="records-list" id="recordsList"></div>
+    </div>
+    
+    <script src="tetris.js"></script>
+</body>
+</html>
