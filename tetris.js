@@ -921,8 +921,8 @@ function evaluatePosition(tempBoard,currentX,currentY) {
     }
     
     var y_weight = 0;
-    if (currentY < 8) {  // 扩大y_weight的影响范围
-        y_weight = (9 - currentY);  // 改为正数，使方块位置越低得分越高
+    if (currentY < 10) {  // 扩大y_weight的影响范围
+        y_weight = (10 - currentY);  // 改为正数，使方块位置越低得分越高
     }
 
     // 使用自定义评分函数或默认公式
@@ -964,11 +964,11 @@ function calculateScore(completeLines, y_weight, weight, holes, narrow, roughnes
     
     return lineBonus +
            weight * 100 -          // 底部权重
-           y_weight * 50000 -       // 越高惩罚越多
-           holes * 50000 -         // 空洞（增加惩罚）
+           y_weight * y_weight *2000 -       // 越高惩罚越多
+           holes* holes* 40000 -         // 空洞（增加惩罚）
            narrow * 10000 -         // 深沟（增加惩罚，比空洞更严重）
-           roughness * 0 -     // 粗糙度
-           aggregateHeight * 0 - // 总高度
+           roughness * 1000 -     // 粗糙度
+           aggregateHeight * 1000 - // 总高度
            maxHeight * 10000 -      // 最大高度
            wellCount * 20000 -     // 井的数量（高惩罚，避免形成深井）
            highestHolePenalty;     // 最高洞上方方块的惩罚
