@@ -308,7 +308,7 @@ function startGame() {
     }
     
     isPaused = false;
-    statusDisplay.textContent = '游戏中' + (isAiMode ? ' (AI模式)' : '');
+    statusDisplay.textContent = '运行' + (isAiMode ? ' (AI)' : '');
     updateButtonStates();
 }
 
@@ -594,7 +594,7 @@ function updateScoreAndLevel(linesCleared) {
 
 // AI执行移动决策
 function performAiMove() {
-    if (currentPiece.y<10){
+    if (currentPiece.y<5){
         let bestMove = findBestMove();
 
         // 旋转到最佳方向 - 添加旋转次数限制，防止死循环
@@ -815,6 +815,14 @@ function evaluatePosition(tempBoard,currentX,currentY) {
     let blocksAboveHighestHole = 0; // 最高洞上方的方块数量
     let highestHoleY = BOARD_HEIGHT; // 最高洞的y坐标（越小越接近顶部）
     
+    // 新增：存储所有洞的列表，每个洞包含x, y和上方方块数量
+    let holesList = [];
+    
+    // 新增：地形多样性指标
+    let hasType1 = false; // x, x+1 类型地形
+    let hasType2 = false; // x, x-1 类型地形
+    let hasType3 = false; // x, x 类型地形
+    
     let tempBoard2 = copyBoard(tempBoard);
 
     var linesCleared=0;
@@ -862,6 +870,13 @@ function evaluatePosition(tempBoard,currentX,currentY) {
                             blocksAboveHighestHole = holes_weight; // 初始化洞上方方块数量
                         }
                     }
+                    
+                    // 新增：将当前洞添加到holesList中
+                    holesList.push({
+                        x: x,
+                        y: y,
+                        blocksAbove: holes_weight // 洞上方的方块数量
+                    });
                 }
             }
         }
@@ -875,11 +890,32 @@ function evaluatePosition(tempBoard,currentX,currentY) {
         }
     }
     
+    // 排序holesList：按y坐标升序（越接近顶部的洞排前面），然后按x坐标升序
+    holesList.sort((a, b) => {
+        if (a.y !== b.y) {
+            return a.y - b.y;
+        }
+        return a.x - b.x;
+    });
+    
     // 计算堆叠粗糙度（相邻列高度差之和）
     for (let x = 0; x < BOARD_WIDTH - 1; x++) {
         var d=Math.abs(columnHeights[x] - columnHeights[x+1]);
         if (d>3){
             roughness += d;
+        }
+    }
+    
+    // 计算地形多样性指标
+    // 检查相邻列的高度关系，确定三种地形类型
+    for (let x = 0; x < BOARD_WIDTH - 1; x++) {
+        const diff = columnHeights[x+1] - columnHeights[x];
+        if (diff === 1) {
+            hasType1 = true; // x, x+1 类型地形
+        } else if (diff === -1) {
+            hasType2 = true; // x, x-1 类型地形
+        } else if (diff === 0 && columnHeights[x] > 0) {
+            hasType3 = true; // x, x 类型地形
         }
     }
     
@@ -925,67 +961,103 @@ function evaluatePosition(tempBoard,currentX,currentY) {
         y_weight = (10 - currentY);  // 改为正数，使方块位置越低得分越高
     }
 
+    // 新增：地形多样性得分，如果三种类型地形都存在，加10000分
+    let terrainDiversityBonus = hasType1 && hasType2 && hasType3 ? 1000 : 0;
+
     // 使用自定义评分函数或默认公式
     if (customEvaluateFunction) {
         try {
-            return customEvaluateFunction(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole);
+            return customEvaluateFunction(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole, holesList, terrainDiversityBonus);
         } catch (e) {
             console.error('自定义评分函数执行错误:', e);
             // 发生错误时回退到默认公式
-            return calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole);
+            return calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole, holesList, terrainDiversityBonus);
         }
     } else {
         // 优化的评分公式：优先消除行数，其次降低总高度，减少空洞和粗糙度
-        return calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole);
+        return calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole, holesList, terrainDiversityBonus);
     }
 }
 
 // 计算最终得分的辅助函数
-function calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole) {
+function calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole, holesList, terrainDiversityBonus) {
     // 优化的权重分配
     // 1. 消除行数最重要
     // 2. 其次是降低堆叠高度和避免井
     // 3. 然后是减少空洞和粗糙度
     // 4. 最后是优先将方块放在低位
     
-    // 为不同行数设置不同的权重
-    let lineBonus = 0;
-    if (completeLines === 1) lineBonus = 100000;
-    else if (completeLines === 2) lineBonus = 500000;
-    else if (completeLines === 3) lineBonus = 1000000;
-    else if (completeLines >= 4) lineBonus = 1500000;
-    
     // 对最高洞上方方块的惩罚：上方方块越多，惩罚越严重
     let highestHolePenalty = 0;
     if (highestHoleX !== -1 && blocksAboveHighestHole > 0) {
         // 上方方块数量的平方惩罚，使惩罚增长更快
-        highestHolePenalty = blocksAboveHighestHole *50000;
+        highestHolePenalty = blocksAboveHighestHole;
     }
     
-    return lineBonus +
-           weight * 100 -          // 底部权重
-           y_weight * y_weight *2000 -       // 越高惩罚越多
-           holes* holes* 40000 -         // 空洞（增加惩罚）
-           narrow * 10000 -         // 深沟（增加惩罚，比空洞更严重）
-           roughness * 1000 -     // 粗糙度
-           aggregateHeight * 1000 - // 总高度
-           maxHeight * 10000 -      // 最大高度
-           wellCount * 20000 -     // 井的数量（高惩罚，避免形成深井）
-           highestHolePenalty;     // 最高洞上方方块的惩罚
+    // 新增：计算所有洞的惩罚值总和
+    let totalHolesPenalty = 0;
+    if (holesList && holesList.length > 0) {
+        // 遍历所有洞，计算每个洞的惩罚值
+        // 只计算最上面的2-3个洞来惩罚，不需要计算所有洞
+        // holesList已经按y坐标升序排序（越接近顶部的洞越靠前）
+        const topHoles = holesList.slice(0, 2); // 取最上面的2个洞
+        topHoles.forEach(hole => {
+            // 洞上方方块数量的平方作为惩罚，使惩罚随上方方块数量增长更快
+            // 还可以根据洞的位置（越接近顶部，y值越小，惩罚越大）增加权重
+            const holePositionWeight = Math.max(1, (BOARD_HEIGHT - hole.y) / 5); // 位置权重，顶部的洞权重更高
+            totalHolesPenalty += hole.blocksAbove  * holePositionWeight;
+        });
+    }
+    
+    
+    var score= 30000.0
+            + completeLines*(30000-10000)
+           //+y_weight * 1000 +         // 方块位置（低位加分）
+           //+weight * 100             // 底部权重
+           -holes * (8000-2000)            // 空洞（增加惩罚）
+           -narrow * 800            // 深沟（增加惩罚）
+           -roughness * 500        // 粗糙度
+           -aggregateHeight * 1000   // 总高度
+           -maxHeight * 500         // 最大高度
+           -wellCount * 1000        // 井的数量（高惩罚，避免形成深井）
+           -totalHolesPenalty * 200 // 所有洞的总惩罚，乘上一个适当的系数
+           + terrainDiversityBonus; // 地形多样性奖励分数
+    score=score/10000;
+    console.log(score);
+    return score;
 }
 
 // 更新公式编辑器显示
 function updateFormulaEditor() {
     const formulaInput = document.getElementById('formulaInput');
     if (formulaInput) {
-        // 将calculateScore函数完整代码作为默认公式
+        // 将calculateScore函数完整代码作为默认公式，包含holesList参数
         formulaInput.value = `// 计算最终得分的辅助函数
-function calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount) {
+function calculateScore(completeLines, y_weight, weight, holes, narrow, roughness, aggregateHeight, maxHeight, wellCount, highestHoleX, blocksAboveHighestHole, holesList, terrainDiversityBonus) {
     // 优化的权重分配
     // 1. 消除行数最重要
     // 2. 其次是降低堆叠高度和避免井
     // 3. 然后是减少空洞和粗糙度
     // 4. 最后是优先将方块放在低位
+    
+    // 对最高洞上方方块的惩罚：上方方块越多，惩罚越严重
+    let highestHolePenalty = 0;
+    if (highestHoleX !== -1 && blocksAboveHighestHole > 0) {
+        // 上方方块数量的平方惩罚，使惩罚增长更快
+        highestHolePenalty = blocksAboveHighestHole;
+    }
+    
+    // 新增：计算所有洞的惩罚值总和
+    let totalHolesPenalty = 0;
+    if (holesList && holesList.length > 0) {
+        // 遍历所有洞，计算每个洞的惩罚值
+        holesList.forEach(hole => {
+            // 洞上方方块数量的平方作为惩罚，使惩罚随上方方块数量增长更快
+            // 还可以根据洞的位置（越接近顶部，y值越小，惩罚越大）增加权重
+            const holePositionWeight = Math.max(1, (BOARD_HEIGHT - hole.y) / 5); // 位置权重，顶部的洞权重更高
+            totalHolesPenalty += hole.blocksAbove * hole.blocksAbove * holePositionWeight;
+        });
+    }
     
     // 为不同行数设置不同的权重
     let lineBonus = 0;
@@ -1002,7 +1074,10 @@ function calculateScore(completeLines, y_weight, weight, holes, narrow, roughnes
            roughness * 5000 -     // 粗糙度
            aggregateHeight * 200 - // 总高度
            maxHeight * 500 -      // 最大高度
-           wellCount * 3000;      // 井的数量（高惩罚，避免形成深井）
+           wellCount * 3000 -     // 井的数量（高惩罚，避免形成深井）
+           highestHolePenalty * 1000 - // 最高洞上方方块的惩罚
+           totalHolesPenalty * 50 + // 所有洞的总惩罚，乘上一个适当的系数
+           terrainDiversityBonus; // 地形多样性奖励分数（三种地形都存在时加10000分）
 }`;
     }
 }

@@ -60,11 +60,15 @@
         .info-box h3 {
             margin-bottom: 10px;
             color: #4ecdc4;
+            display: inline-block;  /* 标签和内容同一行显示 */
+            margin-right: 5px;     /* 标签和内容之间的间距 */
+            font-size: 16px;       /* 稍微缩小字体 */
         }
         
         .info-box p {
-            margin: 5px 0;
-            font-size: 18px;
+            margin: 5px 0;         /* 保留垂直间距 */
+            font-size: 18px;       /* 保持内容字体大小 */
+            display: inline-block; /* 标签和内容同一行显示 */
         }
         
         .next-piece {
@@ -400,27 +404,25 @@
     </style>
 </head>
 <body>
-    <h1>俄罗斯方块</h1>
-    
     <div class="game-container">
         <div class="game-board" id="gameBoard"></div>
         
         <div class="game-info">
             <div class="info-box">
+                <h3>下一个方块</h3>
+                <div class="next-piece" id="nextPiece"></div>
+            </div>
+            <div class="info-box">
                 <h3>分数</h3>
-                <p id="score">0</p>
+                <p id="score">0</p><br>
                 <h3>行数</h3>
-                <p id="lines">0</p>
+                <p id="lines">0</p><br>
                 <h3>等级</h3>
-                <p id="level">1</p>
+                <p id="level">1</p><br>
                 <h3>状态</h3>
                 <p id="status">准备开始</p>
             </div>
             
-            <div class="info-box">
-                <h3>下一个方块</h3>
-                <div class="next-piece" id="nextPiece"></div>
-            </div>
             
             <div class="instructions">
                 <h3>操作说明</h3>
