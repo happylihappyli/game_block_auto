@@ -4,7 +4,7 @@ const BOARD_HEIGHT = 20;
 const BLOCK_SIZE = 30;
 const COLORS = [
     '#1a1a1a',        // 空白
-    '#3333ff',        // 蓝色
+    '#aaaaff',        // 蓝色
     '#00ff00',        // 绿色
     '#ff0000',        // 红色
     '#ffff00',        // 黄色
@@ -72,7 +72,7 @@ let isGameOver = false;  // 游戏是否结束
 let isPaused = false;  // 游戏是否暂停
 let autoDropTimer = null;  // 自动下落计时器
 let isAiMode = false;  // 是否为AI模式
-let aiMoveDelay = 50;  // AI移动延迟（毫秒）- 增加延迟以减少频繁移动
+let aiMoveDelay = 10;  // AI移动延迟（毫秒）- 增加延迟以减少频繁移动
 let aiMoveTimer = null;  // AI移动计时器
 let aiDropSpeed = 3;  // AI模式下的下落速度倍数
 let customEvaluateFunction = null; // 存储用户自定义的评分函数
@@ -291,20 +291,21 @@ function startGame() {
     }
     
     // 根据是否为AI模式设置不同的下落速度
-    const dropInterval = isAiMode ? 50 : 1000;
-    
-    autoDropTimer = setInterval(() => {
-        if (!isPaused && !isGameOver) {
-            movePieceDown();
-        }
-    }, dropInterval);
+    const dropInterval = isAiMode ? aiMoveDelay : 1000;
     
     if (isAiMode && !aiMoveTimer) {
         aiMoveTimer = setInterval(() => {
             if (isAiMode && !isPaused && !isGameOver) {
                 performAiMove();
+                movePieceDown();
             }
         }, aiMoveDelay);
+    }else{
+        autoDropTimer = setInterval(() => {
+            if (!isPaused && !isGameOver) {
+                movePieceDown();
+            }
+        }, dropInterval);
     }
     
     isPaused = false;
@@ -577,7 +578,7 @@ function updateScoreAndLevel(linesCleared) {
                 clearInterval(autoDropTimer);
                 
                 // 根据是否为AI模式设置不同的下落速度
-                const dropInterval = isAiMode ? 50 : 1000;
+                const dropInterval = isAiMode ? aiMoveDelay : 1000;
                 
                 autoDropTimer = setInterval(() => {
                     if (!isPaused && !isGameOver) {
@@ -662,7 +663,7 @@ function findBestMove() {
                 }
                 
                 // 组合当前方块和下一个方块的评分（当前方块权重更高）
-                let combinedScore = currentScore + nextPieceScore * 0.3; // 下一个方块的评分权重为30%
+                let combinedScore = currentScore + nextPieceScore * 1; // 下一个方块的评分权重为30%
                 
                 // 更新最佳位置
                 if (combinedScore > bestScore) {
@@ -801,7 +802,7 @@ function rotateTempPiece(piece) {
 // 评估位置的好坏
 function evaluatePosition(tempBoard,currentX,currentY) {
     // 评估位置的好坏：消除行数、堆叠高度和空洞数量
-    let clearedLines = 0;
+
     let maxHeight = 0;  // 记录最高高度
     let holes = 0;
     let narrow = 0;  // 深沟数量
@@ -828,7 +829,6 @@ function evaluatePosition(tempBoard,currentX,currentY) {
     var linesCleared=0;
     // 检查并消除完整的行
     [tempBoard2,linesCleared] = checkAndClearLines(tempBoard2);
-    clearedLines=linesCleared;
     completeLines=linesCleared;
 
 
@@ -1010,18 +1010,22 @@ function calculateScore(completeLines, y_weight, weight, holes, narrow, roughnes
     }
     
     
+    // 计算深沟惩罚：使用平方增长，使深沟的惩罚随着深度增加而快速增加
+    
     var score= 30000.0
-            + completeLines*(30000-10000)
-           //+y_weight * 1000 +         // 方块位置（低位加分）
+            + completeLines*completeLines*10000
+            //+y_weight * 1000 +         // 方块位置（低位加分）
            //+weight * 100             // 底部权重
-           -holes * (8000-2000)            // 空洞（增加惩罚）
-           -narrow * 800            // 深沟（增加惩罚）
-           -roughness * 500        // 粗糙度
-           -aggregateHeight * 1000   // 总高度
-           -maxHeight * 500         // 最大高度
-           -wellCount * 1000        // 井的数量（高惩罚，避免形成深井）
-           -totalHolesPenalty * 200 // 所有洞的总惩罚，乘上一个适当的系数
+           -holes * holes* 8000           // 空洞（增加惩罚）
+           -narrow * narrow * 200            // 深沟惩罚，深度平方乘以系数
+           //-roughness * 500        // 粗糙度
+           //-aggregateHeight * 1000   // 总高度
+           -maxHeight * maxHeight* 2000         // 最大高度
+           -wellCount * 300        // 井的数量（高惩罚，避免形成深井）
+           -totalHolesPenalty * 2000 // 所有洞的总惩罚，乘上一个适当的系数
            + terrainDiversityBonus; // 地形多样性奖励分数
+    //修改写下面
+    score+= -narrow * narrow * 2000;
     score=score/10000;
     console.log(score);
     return score;
@@ -1070,7 +1074,7 @@ function calculateScore(completeLines, y_weight, weight, holes, narrow, roughnes
            y_weight * 500 +       // 方块位置（低位加分）
            weight * 10 -          // 底部权重
            holes * 2000 -         // 空洞（增加惩罚）
-           narrow * 800 -         // 深沟（增加惩罚）
+           narrowPenalty -        // 深沟惩罚：深度越大，惩罚越多
            roughness * 5000 -     // 粗糙度
            aggregateHeight * 200 - // 总高度
            maxHeight * 500 -      // 最大高度
